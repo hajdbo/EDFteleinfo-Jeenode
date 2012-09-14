@@ -1,9 +1,10 @@
 // Sketch pour envoi de données téléinfo compteur EDF via radio
 // JeenodeUSB=ArduinoUNO
 // envoi par radio: $EDF,00000,00450,3700*   (base, papp,battmV)
+// config des fusebits : http://www.engbedded.com/fusecalc/
 
 /* TODO: 
-- à combiner avec GDF (hall effect sensor, vérifier la conso mA & eventuellement MLX90248)
+- à combiner avec GDF
 */
 #include <JeeLib.h>
 #include <SoftwareSerial.h>
@@ -58,7 +59,7 @@ boolean bFlag_MOTDETAT_recu = false;
 int i = 0;
 int watchdog=0;
 int batteryVoltage = 0;
-unsigned int serial_state = SM_SERIAL_NIL;
+unsigned int serial_state_edf = SM_SERIAL_NIL;
 
 void setup () {
         Serial.begin(57600); // 57600 8N1 sur le serialUSB
@@ -71,7 +72,7 @@ void setup () {
         rf12_sleep(RF12_SLEEP);
 
 	// initialisation de la machine à états: en attente du debut de message
-	serial_state = SM_SERIAL_WAIT_DEB;
+	serial_state_edf = SM_SERIAL_WAIT_DEB;
 	
 	pinMode(LED_PIN, OUTPUT);	
 	//on éteint la led
@@ -142,9 +143,8 @@ void loop () {
 			    rf12_recvDone();
                        // porteuse libre, on envoie le message
                        rf12_sendStart(0, payload, sizeof payload);
-                       rf12_sendWait(2); // 0:normal 1:idle 2:standby 3:poweroff
-                       rf12_sleep(RF12_SLEEP);
-
+                       rf12_sendWait(0); // 0:normal 1:idle 2:standby 3:poweroff
+                       
                        //on éteint la led
                        digitalWrite(LED_PIN, 1);
 
@@ -156,7 +156,7 @@ void loop () {
                 charin = charin & B01111111;
 		
 		// en fonction de l'état de la state machine on avise
-		switch(serial_state) {
+		switch(serial_state_edf) {
 			case SM_SERIAL_NIL:
 				// le setup n'est pas encore terminé, on ne fait rien
 				break;
@@ -165,7 +165,7 @@ void loop () {
 				if(charin == 0x0A) {
 					str_buffer_recept_teleinfo = "";  
 					// on change d'état pour passer au corps du message
-					serial_state = SM_SERIAL_MSG;
+					serial_state_edf = SM_SERIAL_MSG;
 				} else{
                                   // caractère ignoré
 				}
@@ -175,7 +175,7 @@ void loop () {
 				// on a atteint la fin du msg = CR (0x0D)
 				if(charin == 0x0D) {
 					// on change d'état, message suivant
-					serial_state = SM_SERIAL_WAIT_DEB;
+					serial_state_edf = SM_SERIAL_WAIT_DEB;
 					// on lève un flag pour indiquer que le msg est complet
 					bMsg_teleinfo_recu = true;
 				}
@@ -193,14 +193,14 @@ void loop () {
                 //Serial.println(str_buffer_recept_teleinfo);
 		
 		// ENTETE tant qu'on ne lit pas un caractère espace
-		while(str_buffer_recept_teleinfo.charAt(i) != 0x20){
+		while((str_buffer_recept_teleinfo.charAt(i) != 0x20) && (i<str_buffer_recept_teleinfo.length())){
 			str_EnteteMsg += str_buffer_recept_teleinfo.charAt(i);
 			i++;
 		}		
 		i++;		// on saute le caractère espace
 
 		// DATA tant qu'on ne lit pas un caractère espace
-		while(str_buffer_recept_teleinfo.charAt(i) != 0x20){
+		while((str_buffer_recept_teleinfo.charAt(i) != 0x20) && (i<str_buffer_recept_teleinfo.length())){
 			str_DonneeMsg += str_buffer_recept_teleinfo.charAt(i);
 			i++;
 		}
